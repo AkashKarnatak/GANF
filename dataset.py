@@ -184,6 +184,10 @@ def load_drone(data_dir, batch_size, window_size=30):
         for csv_file in csv_files:
             df = pd.read_csv(csv_file)
             df = df.iloc[:df.shape[0] // window_size * window_size]
+            hz = 1e6 / df['timestamp'].diff().dropna().mean()
+            if hz < 9 or hz > 11:
+                continue
+            # TODO: replace it with batch norm
             df = (df - df.mean(axis=0)) / df.std(axis=0)
             dfs.append(df)
         return dfs
@@ -220,6 +224,7 @@ class Drone(Dataset):
         idx, start = [], 0
         for df in dfs:
             idx.append(np.arange(start, start + len(df) - self.window_size, self.stride_size))
+            df.pop("timestamp")
             start = len(df)
         idx = np.concatenate(idx)
         data = pd.concat(dfs).reset_index(drop=True)
