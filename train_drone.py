@@ -93,6 +93,7 @@ max_iter = args.max_iter
 rho_max = args.rho_max
 h_tol = args.h_tol
 epoch = 0
+iters = 0
 
 # initialize A
 if args.graph != "None":
@@ -157,6 +158,8 @@ for _ in range(max_iter):
                 clip_grad_value_(model.parameters(), 1)
                 optimizer.step()
                 loss_train.append(loss.item())
+                writer.add_scalar("Raw Loss/train", loss.item(), iters)
+                iters += 1
                 A.data.copy_(torch.clamp(A.data, min=0, max=1))
 
             # evaluate
@@ -239,6 +242,8 @@ for _ in range(100):
         clip_grad_value_(model.parameters(), 1)
         optimizer.step()
         loss_train.append(loss.item())
+        writer.add_scalar("Raw Loss/train", loss.item(), iters)
+        iters += 1
         A.data.copy_(torch.clamp(A.data, min=0, max=1))
 
     model.eval()
