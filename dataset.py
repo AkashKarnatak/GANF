@@ -187,8 +187,10 @@ def load_drone(data_dir, batch_size, window_size=30):
             hz = 1e6 / df['timestamp'].diff().dropna().mean()
             if hz < 9 or hz > 11:
                 continue
+            # fill na
+            df = df.interpolate().bfill()
             # TODO: replace it with batch norm
-            df = (df - df.mean(axis=0)) / df.std(axis=0)
+            df = (df - df.mean(axis=0)) / (df.std(axis=0) + 1e-6) # prevent 0/0
             dfs.append(df)
         return dfs
 
