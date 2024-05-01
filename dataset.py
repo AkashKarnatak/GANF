@@ -1,4 +1,5 @@
 #%%
+import os
 import pandas as pd
 import torch
 from torch.utils.data import Dataset
@@ -169,3 +170,68 @@ class WaterLabel(Dataset):
         data = self.data[start:end].reshape([self.window_size,-1, 1])
 
         return torch.FloatTensor(data).transpose(0,1),self.label[index]
+
+
+def load_drone(data_dir, batch_size, window_size=30):
+    """
+    Load drone dataset
+    return train_loader, val_loader, test_loader
+    """
+    csv_files = [os.path.join(data_dir, f) for f in os.listdir(data_dir) if f.endswith('.csv')]
+
+    def load_csv(csv_files, window_size=30):
+        dfs = []
+        for csv_file in csv_files:
+            df = pd.read_csv(csv_file)
+            df = df.iloc[:df.shape[0] // window_size * window_size]
+            df = (df - df.mean(axis=0)) / df.std(axis=0)
+            dfs.append(df)
+        return dfs
+
+    train_csv_files = csv_files[:int(0.70*len(csv_files))]
+    val_csv_files = csv_files[int(0.70*len(csv_files)):int(0.85*len(csv_files))]
+    test_csv_files = csv_files[int(0.85*len(csv_files)):]
+
+    np.random.shuffle(train_csv_files)
+    np.random.shuffle(val_csv_files)
+    np.random.shuffle(test_csv_files)
+
+    train_dfs = load_csv(train_csv_files, window_size)
+    val_dfs = load_csv(val_csv_files, window_size)
+    test_dfs = load_csv(test_csv_files, window_size)
+
+    n_attr = len(train_dfs[0].columns) - 1
+
+    train_loader = DataLoader(Drone(train_dfs), batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(Drone(val_dfs), batch_size=batch_size, shuffle=False)
+    test_loader = DataLoader(Drone(test_dfs), batch_size=batch_size, shuffle=False)
+
+    return train_loader, val_loader, test_loader, n_attr
+
+class Drone(Dataset):
+    def __init__(self, dfs, window_size=30, stride_size=5):
+        super(Drone, self).__init__()
+        self.window_size = window_size
+        self.stride_size = stride_size
+
+        self.data, self.idx = self.preprocess(dfs)
+
+    def preprocess(self, dfs):
+        idx, start = [], 0
+        for df in dfs:
+            idx.append(np.arange(start, start + len(df) - self.window_size, self.stride_size))
+            start = len(df)
+        idx = np.concatenate(idx)
+        data = pd.concat(dfs).reset_index(drop=True)
+        return data.values, idx
+
+    def __len__(self):
+        return len(self.idx)
+
+    def __getitem__(self, index):
+        #  N X K X L X D
+        start = self.idx[index]
+        end = start + self.window_size
+        data = self.data[start:end].reshape([self.window_size,-1, 1])
+
+        return torch.FloatTensor(data).transpose(0,1)
