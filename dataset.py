@@ -179,18 +179,14 @@ def load_drone(data_dir, batch_size, window_size=30):
     """
     csv_files = [os.path.join(data_dir, f) for f in os.listdir(data_dir) if f.endswith('.csv')]
 
-    def load_csv(csv_files, window_size=30):
+    def load_csv(csv_files):
         dfs = []
         for csv_file in csv_files:
             df = pd.read_csv(csv_file)
-            df = df.iloc[:df.shape[0] // window_size * window_size]
             hz = 1e6 / df['timestamp'].diff().dropna().mean()
             if hz < 9 or hz > 11:
                 continue
             # fill na
-            df = df.interpolate().bfill()
-            # TODO: replace it with batch norm
-            df = (df - df.mean(axis=0)) / (df.std(axis=0) + 1e-6) # prevent 0/0
             dfs.append(df)
         return dfs
 
@@ -202,15 +198,15 @@ def load_drone(data_dir, batch_size, window_size=30):
     np.random.shuffle(val_csv_files)
     np.random.shuffle(test_csv_files)
 
-    train_dfs = load_csv(train_csv_files, window_size)
-    val_dfs = load_csv(val_csv_files, window_size)
-    test_dfs = load_csv(test_csv_files, window_size)
+    train_dfs = load_csv(train_csv_files)
+    val_dfs = load_csv(val_csv_files)
+    test_dfs = load_csv(test_csv_files)
 
     n_attr = len(train_dfs[0].columns) - 1
 
-    train_loader = DataLoader(Drone(train_dfs), batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(Drone(val_dfs), batch_size=batch_size, shuffle=False)
-    test_loader = DataLoader(Drone(test_dfs), batch_size=batch_size, shuffle=False)
+    train_loader = DataLoader(Drone(train_dfs, window_size), batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(Drone(val_dfs, window_size), batch_size=batch_size, shuffle=False)
+    test_loader = DataLoader(Drone(test_dfs, window_size), batch_size=batch_size, shuffle=False)
 
     return train_loader, val_loader, test_loader, n_attr
 
@@ -225,6 +221,10 @@ class Drone(Dataset):
     def preprocess(self, dfs):
         idx, start = [], 0
         for df in dfs:
+            df = df.iloc[:df.shape[0] // self.window_size * self.window_size]
+            df = df.interpolate().bfill()
+            # TODO: replace it with batch norm
+            df = (df - df.mean(axis=0)) / (df.std(axis=0) + 1e-6) # prevent 0/0
             idx.append(np.arange(start, start + len(df) - self.window_size, self.stride_size))
             df.pop("timestamp")
             start = len(df)
